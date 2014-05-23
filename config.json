@@ -1,0 +1,25 @@
+{
+    "host": "0.0.0.0",
+    "port": 443,
+    "ssl": {
+        "enabled": false,
+        "ca": ".crt",
+        "key": ".key",
+        "cert": ".crt"
+    },
+    "databases": [
+        {
+            "name": "foo",
+            "db": {
+                "type": "pg",
+                "host": "localhost",
+                "database": "",
+                "user": "",
+                "password": ""
+            },
+            queries: {
+                "bar": "select * from bar where baz is not null"
+            }
+        }
+    ]
+}
