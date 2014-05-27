@@ -1,6 +1,6 @@
 {
     "host": "0.0.0.0",
-    "port": 443,
+    "port": 4400,
     "ssl": {
         "enabled": false,
         "ca": ".crt",
@@ -9,16 +9,17 @@
     },
     "databases": [
         {
-            "name": "foo",
-            "db": {
-                "type": "pg",
-                "host": "localhost",
-                "database": "",
-                "user": "",
-                "password": ""
-            },
-            queries: {
-                "bar": "select * from bar where baz is not null"
+            "name": "brawlers",
+            "type": "pg",
+            "host": "localhost",
+            "database": "playground",
+            "user": "turtlekitty",
+            "password": "",
+            "queries": {
+                "getBrawler": "select * from brawler where id = ?",
+                "getBrawlerPowers": "select b.name as brawler, p.name, p.type, p.rank from brawler b inner join power p on (b.id = p.brawler_id) where b.id = ?",
+                "getBrawlerGear": "select b.name as brawler, g.name from brawler b inner join brawler_gear bg on (b.id = bg.brawler_id) inner join gear g on (bg.gear_id = g.id) where b.id = ?",
+                "getBrawlerWhere": "select * from brawler where brawn >= ?"
             }
         }
     ]

@@ -1,0 +1,38 @@
+{
+    "author": "IQumulus LLC",
+    "name": "DataWrangler",
+    "description": "IQ DB abstraction",
+    "version": "0.0.1",
+    "private": true,
+    "main": "index.js",
+    "bin": { },
+    "repository": {
+        "url": "https://github.com/iqumulus/data-wrangler"
+    },
+    "engines": {
+        "node": "~0.6.7"
+    },
+    "license": "Proprietary",
+    "dependencies": {
+        "bcrypt": "0.7.6",
+        "node-uuid": "1.4.0",
+        "express": "3.3.5",
+        "underscore": "1.5.1",
+        "async": "0.2.9",
+        "mkdirp": "0.3.5",
+        "mime": "1.2.11",
+        "node-dir": "0.1.2",
+        "email": "0.2.6",
+        "express-debug":"*",
+        "moment": "2.3.1",
+        "optimist": "0.6.0",
+        "socket.io": "0.9.16",
+        "request": "2.34.0",
+        "validator": "3.3.0",
+        "tmp": "0.0.23",
+        "touch": "0.0.2",
+        "node-dbi": "0.7.1",
+        "pg": "2.11.1"
+    },
+    "devDependencies": {}
+}

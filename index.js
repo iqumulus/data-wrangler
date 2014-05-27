@@ -25,6 +25,7 @@ var
     moment = require('moment'),
     nodeDBI = require('node-dbi'),
     dbs = { },
+    dbQueryMap = { },
     clog = console.log,
     cerr = console.error,
     fmt = util.format,
@@ -53,12 +54,48 @@ config.databases.forEach(
     function (db) {
         dbs[db.name] = DBconnect(db);
 
-        db.queries.forEach(
-            function (q) {
+        Object.keys(db.queries).forEach(
+            function (qname) {
+                var qtext = db.queries[qname],
+                    numParams = numQuestions(qtext),
+                    qyarr = [ ]
+                ;
+
+                dbQueryMap[qname] = db.name;
+
+                for (var i = 1; i <= numParams; i++) {
+                    qyarr[i] = '/:p' + i;
+                }
+
+                var routePath = [ fmt('/query/%s', qname) ].concat(qyarr).join('');
+
                 server.get(
-                    fmt('/db/%s/query/%s', db.name, q.name),
+                    routePath,
                     function (req, res) {
-                        query(); // fixme
+                        var args = [ ];
+
+                        for (var i = 1; i <= numParams; i++) {
+                            var val = req.param( 'p' + i );
+
+                            if (! (isUUID(val) || isAlphaNumeric(val)) ) {
+                                return itSucks(res, 'Query parameters must be alphanumeric or UUIDs.');
+                            }
+
+                            args.push(val);
+                        }
+
+                        query(
+                            dbs[db.name],
+                            qtext,
+                            args,
+                            function (e, results) {
+                                if (e) {
+                                    return itSucks(res, e);
+                                }
+
+                                itsGood(res, { results: results });
+                            }
+                        );
                     }
                 );
             }
@@ -67,7 +104,7 @@ config.databases.forEach(
 );
 
 console.log(
-    "\nREST DB online.\n%s\n\n",
+    "\nREST DB online.\n%s\n",
     moment().format('MMMM Do YYYY, h:mm:ss a')
 );
 
@@ -96,11 +133,12 @@ function query (db, query, args, fn) {
     db.fetchAll(
         query,
         args,
-        function (err, results) {
-            if (err) { return itSucks(res, err); } // fixme
-            itsGood(res, { results: results }); // fixme
-        }
+        fn
     );
+}
+
+function numQuestions (query) {
+    return query.match(/\?/g).length;
 }
 
 function isAlphaNumeric (x) {
