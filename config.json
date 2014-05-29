@@ -19,7 +19,8 @@
                 "getBrawler": "select * from brawler where id = ?",
                 "getBrawlerPowers": "select b.name as brawler, p.name, p.type, p.rank from brawler b inner join power p on (b.id = p.brawler_id) where b.id = ?",
                 "getBrawlerGear": "select b.name as brawler, g.name from brawler b inner join brawler_gear bg on (b.id = bg.brawler_id) inner join gear g on (bg.gear_id = g.id) where b.id = ?",
-                "getBrawlerWhere": "select * from brawler where brawn >= ?"
+                "getBrawlerWhere": "select * from brawler where brawn >= ?",
+                "getXfromYwhereZisQ": "select $x from $y where $z = '$q'"
             }
         }
     ]
