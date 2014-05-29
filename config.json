@@ -22,6 +22,21 @@
                 "getBrawlerWhere": "select * from brawler where brawn >= ?",
                 "getXfromYwhereZisQ": "select $x from $y where $z = '$q'"
             }
+        },
+        {
+            "name": "foo",
+            "type": "mysql",
+            "host": "localhost",
+            "database": "foobarbaz",
+            "user": "turtlekitty",
+            "password": "",
+            "queries": {
+                "descTable": "desc $table",
+                "getFoo": "select * from foo where id = ?",
+                "getFooBars": "select bar.id, bar.rank from foo inner join bar on (foo.id = bar.foo_id) where foo.id = ?",
+                "getStuff": "select * from $relation where $field = ?"
+            }
         }
     ]
 }
+

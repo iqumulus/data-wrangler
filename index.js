@@ -116,10 +116,6 @@ config.databases.forEach(
                                 return itSucks(res, fmt('Missing parameter: %s', 'p' + i));
                             }
 
-                            if (! (isUUID(val) || isAlphaNumeric(val)) ) {
-                                return itSucks(res, 'Query parameters must be alphanumeric.');
-                            }
-
                             args.push(val);
                         }
 
@@ -219,7 +215,7 @@ function showAPI (req, res) {
 }
 
 function addRecord (req, res) {
-    itsSucks(res, "NIY");
+    itSucks(res, "NIY");
 }
 
 function getRecordList (req, res) {
@@ -229,6 +225,10 @@ function getRecordList (req, res) {
         count = req.query.perpage ? parseInt(req.query.perpage) : 20,
         sortby = req.query.sortby || 'id'
     ;
+
+    if (!dbs[dbname]) {
+        return itSucks(res, 'Database not found.');
+    }
 
     if (! isAlphaNumeric(dbname)) {
         return itSucks(res, 'DB value must be alphanumeric.');
@@ -282,12 +282,29 @@ function getRecordList (req, res) {
 }
 
 function getRecord (req, res) {
-    var relation = req.params.relation,
+    var dbname = req.params.db,
+        relation = req.params.relation,
         id = req.params.id
     ;
 
+    if (!dbs[dbname]) {
+        return itSucks(res, 'Database not found.');
+    }
+
+    if (! isAlphaNumeric(dbname)) {
+        return itSucks(res, 'DB value must be alphanumeric.');
+    }
+
+    if (sqlCommentRegex.test(dbname)) {
+        return itSucks(res, 'DB value can not contain SQL comments.');
+    }
+
     if (! isAlphaNumeric(relation)) {
         return itSucks(res, 'Relation value must be alphanumeric.');
+    }
+
+    if (sqlCommentRegex.test(relation)) {
+        return itSucks(res, 'Relation value can not contain SQL comments.');
     }
 
     if (! isAlphaNumeric(id)) {
@@ -296,7 +313,7 @@ function getRecord (req, res) {
 
     var query = util.format('select * from %s where id = ?', relation);
 
-    db.fetchRow(
+    dbs[dbname].fetchRow(
         query,
         [ id ],
         function (err, row) {
@@ -307,26 +324,47 @@ function getRecord (req, res) {
 }
 
 function getSubRecordList (req, res) {
-    var relation = req.params.relation,
+    var dbname = req.params.db,
+        relation = req.params.relation,
         id = req.params.id,
         subrel = req.params.subrelation
     ;
+
+    if (!dbs[dbname]) {
+        return itSucks(res, 'Database not found.');
+    }
+
+    if (! isAlphaNumeric(dbname)) {
+        return itSucks(res, 'DB value must be alphanumeric.');
+    }
+
+    if (sqlCommentRegex.test(dbname)) {
+        return itSucks(res, 'DB value can not contain SQL comments.');
+    }
 
     if (! isAlphaNumeric(relation)) {
         return itSucks(res, 'Relation value must be alphanumeric.');
     }
 
-    if (! isUUID(id)) {
-        return itSucks(res, 'ID must be a UUID.');
+    if (sqlCommentRegex.test(relation)) {
+        return itSucks(res, 'Relation value can not contain SQL comments.');
     }
 
     if (! isAlphaNumeric(subrel)) {
         return itSucks(res, 'SubRelation value must be alphanumeric.');
     }
 
+    if (sqlCommentRegex.test(subrel)) {
+        return itSucks(res, 'SubRelation value can not contain SQL comments.');
+    }
+
+    if (! isAlphaNumeric(id)) {
+        return itSucks(res, 'ID must be a alphanumeric.');
+    }
+
     var query = util.format('select * from %s where %s_id = ?', subrel, relation);
 
-    db.fetchAll(
+    dbs[dbname].fetchAll(
         query,
         [ id ],
         function (err, results) {
@@ -337,11 +375,11 @@ function getSubRecordList (req, res) {
 }
 
 function updateRecord (req, res) {
-    itsSucks(res, "NIY");
+    itSucks(res, "NIY");
 }
 
 function deleteRecord( req, res) {
-    itsSucks(res, "NIY");
+    itSucks(res, "NIY");
 }
 
 
