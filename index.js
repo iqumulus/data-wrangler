@@ -49,6 +49,7 @@ var
     queryVarRegex = /\$(\w+)/g
 ;
 
+server.use(gateKeeper());
 server.use(express.bodyParser());
 server.use(express.cookieParser());
 server.use(express.logger());
@@ -165,6 +166,47 @@ http.createServer(server).listen(config.port);
 
 
 // utils
+
+function gateKeeper () { 
+    return function (req, res, next) {
+        req.iqumulus = { }; 
+
+        res.header('Access-Control-Allow-Origin', '*');
+        res.header('Access-Control-Allow-Methods', 'GET,PUT,POST,DELETE,OPTIONS');
+        res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, Content-Length, X-Requested-With');
+
+        if ('OPTIONS' === req.method) {
+          return res.send(200);
+        }    
+
+        return next();
+
+        // current unused authentication stuff
+
+        var token = req.cookies.portal_auth || common.getp(req, 'token');
+
+        isLoggedIn(
+            token,
+            function (session) {
+
+                if (session) {
+                    req.iqumulus.session = session;
+                }    
+
+                if (isUnrestricted(req)) {
+                    return next();
+                }    
+
+                if (!session) {
+                    console.log('GateKeeper denied access');
+                    return sendHome(res, 'Access Denied');
+                }    
+
+                return next();
+            }    
+        );   
+    };   
+}    
 
 function ifNull (x, defaultVal) {
     if (x === null || x === undefined) {
