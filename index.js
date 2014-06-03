@@ -43,6 +43,12 @@ var
     clog = console.log,
     cerr = console.error,
     fmt = util.format,
+    sqlhttpMap = {
+        select: 'get',
+        insert: 'put',
+        update: 'post',
+        delete: 'del'
+    },
     alphaNumericRegex = /^[A-Za-z0-9_\-.]+$/,
     uuidRegex = /^[A-Fa-f0-9]{8}-?[A-Fa-f0-9]{4}-?[A-Fa-f0-9]{4}-?[A-Fa-f0-9]{4}-?[A-Fa-f0-9]{12}$/,
     sqlCommentRegex = /--+/g,
@@ -74,84 +80,7 @@ config.databases.forEach(
 
         Object.keys(db.queries).forEach(
             function (qname) {
-                var qtmpl = db.queries[qname],
-                    numParams = numQuestions(qtmpl),
-                    strip$ = function (x) { return x.replace('$', ''); }, 
-                    qvars = ifNull(qtmpl.match(queryVarRegex), []).map(strip$),
-                    qyarr = [ ]
-                ;
-
-                templates[qname] = hb.compile( qtmpl.replace(queryVarRegex, '{{ $1 }}') );
-
-                for (var i = 1; i <= numParams; i++) {
-                    qyarr[i] = '/:p' + i;
-                }
-
-                var routePath = [ fmt('/query/%s', qname) ].concat(qyarr).join('');
-
-                server.get(
-                    routePath,
-                    function (req, res) {
-                        var args = [ ],
-                            qvals = { },
-                            fail = ''
-                        ;
-
-                        qvars.forEach(
-                            function (qv) {
-                                var val = req.param(qv);
-
-                                if (sqlCommentRegex.test(val)) {
-                                    fail += 'SQL comments are forbidden as inputs.';
-                                    return;
-                                }
-
-                                if (! (isUUID(val) || isAlphaNumeric(val)) ) {
-                                    return itSucks(res, 'Query parameters must be alphanumeric.');
-                                }
-
-                                if (val) {
-                                    qvals[qv] = val;
-                                }
-                                else {
-                                    fail += fmt('Parameter "%s" is required!\n', qv);
-                                }
-                            }
-                        );
-
-                        if (fail.length > 0) {
-                            return itSucks(res, fail);
-                        }
-
-                        for (var i = 1; i <= numParams; i++) {
-                            var val = req.param( 'p' + i );
-
-                            if (!val) {
-                                return itSucks(res, fmt('Missing parameter: %s', 'p' + i));
-                            }
-
-                            args.push(val);
-                        }
-
-                        var qtext = (qvars.length > 0)
-                                  ? templates[qname](qvals)
-                                  : qtmpl
-                        ;
-
-                        query(
-                            dbs[db.name],
-                            qtext,
-                            args,
-                            function (e, results) {
-                                if (e) {
-                                    return itSucks(res, e);
-                                }
-
-                                itsGood(res, { results: results });
-                            }
-                        );
-                    }
-                );
+                makeQueryRoute(db.name, qname, db.queries[qname]);
             }
         );
     }
@@ -262,6 +191,108 @@ function itSucks (res, error) {
     res.send({ ok: false, error: error });
 }
 
+function examineQuery(query) {
+}
+
+function validateQueryVars (req, qvars) {
+    var
+        qvals = { },
+        fail = []
+    ;
+
+    qvars.forEach(
+        function (qv) {
+            var val = req.param(qv);
+
+            if (!val) {
+                fail.push( fmt('Parameter "%s" is required!\n', qv) );
+                return;
+            }
+
+            if (sqlCommentRegex.test(val)) {
+                fail.push('SQL comments are forbidden as inputs.');
+                return;
+            }
+
+            if (! (isUUID(val) || isAlphaNumeric(val)) ) {
+                fail.push('Query parameters must be alphanumeric.');
+                return;
+            }
+
+            qvals[qv] = val;
+        }
+    );
+
+    if (fail.length > 0) {
+        return { ok: false, error: fail.join('\n') };
+    }
+
+    return { ok: true, results: qvals };
+}
+
+function makeQueryRoute (dbname, qname, qtmpl) {
+    var
+        numParams = numQuestions(qtmpl),
+        strip$ = function (x) { return x.replace('$', ''); }, 
+        qvars = ifNull(qtmpl.match(queryVarRegex), []).map(strip$),
+        qyarr = [ ]
+    ;
+
+    templates[qname] = hb.compile( qtmpl.replace(queryVarRegex, '{{ $1 }}') );
+
+    for (var i = 1; i <= numParams; i++) {
+        qyarr[i] = '/:p' + i;
+    }
+
+    var routePath = [ fmt('/query/%s', qname) ].concat(qyarr).join('');
+
+    server.get(
+        routePath,
+        function (req, res) {
+            var args = [ ],
+                qvals = { },
+                fail = ''
+            ;
+
+            var checkIt = validateQueryVars(req, qvars);
+
+            if (checkIt.ok) {
+                qvals = checkIt.results;
+            }
+            else {
+                return itSucks(res, checkIt.error);
+            }
+
+            for (var i = 1; i <= numParams; i++) {
+                var val = req.param( 'p' + i );
+
+                if (!val) {
+                    return itSucks(res, fmt('Missing parameter: %s', 'p' + i));
+                }
+
+                args.push(val);
+            }
+
+            var qtext = (qvars.length > 0)
+                      ? templates[qname](qvals)
+                      : qtmpl
+            ;
+
+            query(
+                dbs[dbname],
+                qtext,
+                args,
+                function (e, results) {
+                    if (e) {
+                        return itSucks(res, e);
+                    }
+
+                    itsGood(res, { results: results });
+                }
+            );
+        }
+    );
+}
 
 // routes
 
