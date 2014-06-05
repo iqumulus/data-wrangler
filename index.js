@@ -40,6 +40,7 @@ var
     nodeDBI = require('node-dbi'),
     dbs = { },
     templates = { },
+    queryinfo = { },
     clog = console.log,
     cerr = console.error,
     fmt = util.format,
@@ -49,10 +50,12 @@ var
         update: 'post',
         delete: 'del'
     },
+    whitespaceRegex = /\s+/,
     alphaNumericRegex = /^[A-Za-z0-9_\-.]+$/,
     uuidRegex = /^[A-Fa-f0-9]{8}-?[A-Fa-f0-9]{4}-?[A-Fa-f0-9]{4}-?[A-Fa-f0-9]{4}-?[A-Fa-f0-9]{12}$/,
     sqlCommentRegex = /--+/g,
-    queryVarRegex = /\$(\w+)/g
+    queryVarRegex = /\$(\w+)/g,
+    selectRegex = /^\s*select\s+(.+)\s+from.*$/
 ;
 
 server.use(gateKeeper());
@@ -80,6 +83,7 @@ config.databases.forEach(
 
         Object.keys(db.queries).forEach(
             function (qname) {
+                queryinfo[qname] = examineQuery(db.queries[qname]);
                 makeQueryRoute(db.name, qname, db.queries[qname]);
             }
         );
@@ -145,6 +149,14 @@ function ifNull (x, defaultVal) {
     return x;
 }
 
+function emptyfilter (xs) {
+    return xs.filter(
+        function (x) {
+            return x ? true : false;
+        }
+    );
+}
+
 function DBconnect (conf) {
     var db = new nodeDBI.DBWrapper(
         conf.type,
@@ -192,6 +204,26 @@ function itSucks (res, error) {
 }
 
 function examineQuery(query) {
+    var fields = [];
+
+    if (selectRegex.test(query)) {
+        var colspec = selectRegex.exec(query)[1],
+            things = colspec.split(/\s*,\s*/)
+        ;
+
+        things.forEach(
+            function (thing) {
+                var newf = whitespaceRegex.test(thing)
+                         ? thing.split(whitespaceRegex).pop()
+                         : thing.split('.').pop()
+                ;
+
+                fields.push(newf);
+            }
+        );
+    }
+
+    return fields;
 }
 
 function validateQueryVars (req, qvars) {
@@ -294,10 +326,43 @@ function makeQueryRoute (dbname, qname, qtmpl) {
     );
 }
 
+
 // routes
 
 function showAPI (req, res) {
-    res.send(server.routes);
+    var routes = Object.keys(server.routes).reduce(
+        function (result, method) {
+            result[method] = server.routes[method].map(
+                function (r) {
+                    var path = emptyfilter( r.path.split(/\//) );
+
+                    if (path[0] !== 'query') {
+                        return r;
+                    }
+
+                    var qname = path[1],
+                        qinfo = queryinfo[qname]
+                    ;
+
+                    if (!qinfo) {
+                        cerr('Query info not found for %s!', qname);
+                        return r;
+                    }
+
+                    r.dataType = {
+                        fields: qinfo
+                    };
+
+                    return r;
+                }
+            );
+
+            return result;
+        },
+        { }
+    );
+
+    res.send(routes);
 }
 
 function addRecord (req, res) {
