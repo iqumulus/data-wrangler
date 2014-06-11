@@ -55,7 +55,8 @@ var
     uuidRegex = /^[A-Fa-f0-9]{8}-?[A-Fa-f0-9]{4}-?[A-Fa-f0-9]{4}-?[A-Fa-f0-9]{4}-?[A-Fa-f0-9]{12}$/,
     sqlCommentRegex = /--+/g,
     queryVarRegex = /\$(\w+)/g,
-    selectRegex = /^\s*select\s+(.+)\s+from.*$/
+    subQueryRegex = /\(\s*select.*?\)/gi,
+    selectRegex = /^\s*select\s+(.+)\s+from.*$/i
 ;
 
 server.use(gateKeeper());
@@ -68,6 +69,8 @@ server.on('error', function (err) {
 });
 
 server.get('/', showAPI);
+
+/*
 server.post('/db/:db/rel/:relation', addRecord);
 
 server.get('/db/:db/rel/:relation', getRecordList);
@@ -76,6 +79,7 @@ server.get('/db/:db/rel/:relation/:id/:subrelation', getSubRecordList);
 
 server.post('/db/:db/rel/:relation/:id', updateRecord);
 server.del('/db/:db/rel/:relation/:id', deleteRecord);
+*/
 
 config.databases.forEach(
     function (db) {
