@@ -51,7 +51,7 @@ var
         delete: 'del'
     },
     whitespaceRegex = /\s+/,
-    alphaNumericRegex = /^[A-Za-z0-9_\-.]+$/,
+    alphaNumericRegex = /^[\sA-Za-z0-9_\-.]+$/,
     uuidRegex = /^[A-Fa-f0-9]{8}-?[A-Fa-f0-9]{4}-?[A-Fa-f0-9]{4}-?[A-Fa-f0-9]{4}-?[A-Fa-f0-9]{12}$/,
     sqlCommentRegex = /--+/g,
     queryVarRegex = /\$(\w+)/g,
