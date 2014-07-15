@@ -207,12 +207,69 @@ function itSucks (res, error) {
     res.send({ ok: false, error: error });
 }
 
+function parseColspec (text) {
+    var chars = text.split('')
+        holder = [ ],
+        cols = [ ]
+    ;
+
+    function parseFunk (chars) {
+        var holder = [ ];
+
+        while (chars.length > 0) {
+            var c = chars.shift();
+
+            if (c === '(') {
+                holder.push(c, parseFunk( chars ) );
+            }
+            else if (c === ')') {
+                holder.push(c);
+                return holder.join('');
+            }
+            else {
+                holder.push(c);
+            }
+        }
+
+        console.error('Unmatched "("!');
+
+        return holder.join('');
+    }
+
+    function mutate () {
+        cols.push( holder.join('').trim() );
+    }
+
+    while (chars.length > 0) {
+        var c = chars.shift();
+
+        if (c === ',') {
+            mutate();
+            holder = [ ];
+        }
+        else {
+            if (c === '(') {
+                holder.push(c, parseFunk( chars ) );
+            }
+            else {
+                holder.push(c);
+            }
+        }
+    }
+
+    if (holder.length > 0) {
+        mutate();
+    }
+
+    return cols;
+}
+
 function examineQuery(query) {
     var fields = [];
 
     if (selectRegex.test(query)) {
         var colspec = selectRegex.exec(query)[1],
-            things = colspec.split(/\s*,\s*/)
+            things = parseColspec(colspec)
         ;
 
         things.forEach(
