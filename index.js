@@ -39,7 +39,10 @@ var
     moment = require('moment'),
     nodeDBI = require('node-dbi'),
     dbs = { },
-    templates = { },
+    templates = {
+        queries: { },
+        rest: { }
+    },
     queryinfo = { },
     clog = console.log,
     cerr = console.error,
@@ -91,6 +94,12 @@ config.databases.forEach(
                 makeQueryRoute(db.name, qname, db.queries[qname]);
             }
         );
+    }
+);
+
+config.externalServices.forEach(
+    function (ext) {
+        makeRESTroute(ext);
     }
 );
 
@@ -323,15 +332,18 @@ function validateQueryVars (req, qvars) {
     return { ok: true, results: qvals };
 }
 
+function strip$ (x) {
+    return x.replace('$', '');
+}
+
 function makeQueryRoute (dbname, qname, qtmpl) {
     var
         numParams = numQuestions(qtmpl),
-        strip$ = function (x) { return x.replace('$', ''); }, 
         qvars = ifNull(qtmpl.match(queryVarRegex), []).map(strip$),
         qyarr = [ ]
     ;
 
-    templates[qname] = hb.compile( qtmpl.replace(queryVarRegex, '{{ $1 }}') );
+    templates.queries[qname] = hb.compile( qtmpl.replace(queryVarRegex, '{{ $1 }}') );
 
     for (var i = 1; i <= numParams; i++) {
         qyarr[i] = '/:p' + i;
@@ -367,7 +379,7 @@ function makeQueryRoute (dbname, qname, qtmpl) {
             }
 
             var qtext = (qvars.length > 0)
-                      ? templates[qname](qvals)
+                      ? templates.queries[qname](qvals)
                       : qtmpl
             ;
 
@@ -381,6 +393,60 @@ function makeQueryRoute (dbname, qname, qtmpl) {
                     }
 
                     itsGood(res, { results: results });
+                }
+            );
+        }
+    );
+}
+
+function makeRESTroute (foreigner) {
+    var fname = foreigner.name;
+
+    var foo = {
+        "external_services": [
+            {   
+                "name": "WorldBank",
+                "baseURI": "http://api.worldbank.org/countries",
+                "routes": [
+                    {   
+                        "method": "get",
+                        "localpath": "/countrydata/$country/$fromYear/$toYear",
+                        "path": "/$country/indicators/NY.GDP.PCAP.CD?format=jsonp&prefix=?&date=$fromYear:$toYear"
+                    }   
+                ]   
+            }   
+        ]   
+    };
+
+    templates.rest[fname] = { };
+
+    foreigner.routes.forEach(
+        function (r) {
+            var qvars = ifNull(r.localpath.match(queryVarRegex), []).map(strip$),
+                lpath = r.localpath.replace(queryVarRegex, ':$1')
+            ;
+
+            templates.rest[fname][lpath] = hb.compile( r.path.replace(queryVarRegex, '{{ $1 }}') );
+
+            server[r.method](
+                [ '/ffi/', fname, lpath].join(''),
+                function (req, res) {
+                    var remotePath = lpath;
+
+                    if (qvars.length > 0) {
+                        var checkIt = validateQueryVars(req, qvars);
+
+                        if (checkIt.ok) {
+                            qvals = checkIt.results;
+                        }
+                        else {
+                            return itSucks(res, checkIt.error);
+                        }
+
+                        remotePath = templates.rest[lpath](qvals);
+                    }
+
+                    
                 }
             );
         }
