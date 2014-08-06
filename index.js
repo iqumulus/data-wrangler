@@ -34,6 +34,7 @@ var
     https = require('https'),
     util = require('util'),
     express = require('express'),
+    requester = require('request'),
     server = express(),
     hb = require('handlebars'),
     moment = require('moment'),
@@ -404,18 +405,18 @@ function makeRESTroute (foreigner) {
 
     var foo = {
         "external_services": [
-            {   
+            {
                 "name": "WorldBank",
                 "baseURI": "http://api.worldbank.org/countries",
                 "routes": [
-                    {   
+                    {
                         "method": "get",
                         "localpath": "/countrydata/$country/$fromYear/$toYear",
                         "path": "/$country/indicators/NY.GDP.PCAP.CD?format=jsonp&prefix=?&date=$fromYear:$toYear"
-                    }   
-                ]   
-            }   
-        ]   
+                    }
+                ]
+            }
+        ]
     };
 
     templates.rest[fname] = { };
@@ -426,7 +427,7 @@ function makeRESTroute (foreigner) {
                 lpath = r.localpath.replace(queryVarRegex, ':$1')
             ;
 
-            templates.rest[fname][lpath] = hb.compile( r.path.replace(queryVarRegex, '{{ $1 }}') );
+            templates.rest[fname][lpath] = hb.compile( r.path );
 
             server[r.method](
                 [ '/ffi/', fname, lpath].join(''),
@@ -443,10 +444,13 @@ function makeRESTroute (foreigner) {
                             return itSucks(res, checkIt.error);
                         }
 
-                        remotePath = templates.rest[lpath](qvals);
+                        remotePath = templates.rest[fname][lpath](qvals);
                     }
 
-                    
+                    requester({
+                        method: r.method,
+                        uri: foreigner.baseURI + remotePath,
+                    }).pipe(res);
                 }
             );
         }

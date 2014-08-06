@@ -34,7 +34,8 @@
         "node-dbi": "0.7.1",
         "pg": "2.11.1",
         "mysql": "2.3.2",
-        "handlebars": "2.0.0-alpha.4"
+        "handlebars": "2.0.0-alpha.4",
+        "request": "2.40.0"
     },
     "devDependencies": {}
 }
