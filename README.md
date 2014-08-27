@@ -138,14 +138,14 @@ Each "?" added to a query adds to the query's route.  The following config
 would lead to three routes:
 
     /query/fooMakers
-    /query/fooMakers/:place
-    /query/fooMakers/:place/:type
+    /query/fooMakersByPlace/:place
+    /query/fooMakersByPlaceAndType/:place/:type
 
 Accessed like
 
     /query/fooMakers
-    /query/fooMakers/Texas
-    /query/fooMakers/Texas/green
+    /query/fooMakersByPlace/Texas
+    /query/fooMakersByPlaceAndType/Texas/green
 
 Positional variables are automatically quoted.
 
