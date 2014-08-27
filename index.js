@@ -85,24 +85,28 @@ server.post('/db/:db/rel/:relation/:id', updateRecord);
 server.del('/db/:db/rel/:relation/:id', deleteRecord);
 */
 
-config.databases.forEach(
-    function (db) {
-        dbs[db.name] = DBconnect(db);
+if (config.databases) {
+    config.databases.forEach(
+        function (db) {
+            dbs[db.name] = DBconnect(db);
 
-        Object.keys(db.queries).forEach(
-            function (qname) {
-                queryinfo[qname] = examineQuery(db.queries[qname]);
-                makeQueryRoute(db.name, qname, db.queries[qname]);
-            }
-        );
-    }
-);
+            Object.keys(db.queries).forEach(
+                function (qname) {
+                    queryinfo[qname] = examineQuery(db.queries[qname]);
+                    makeQueryRoute(db.name, qname, db.queries[qname]);
+                }
+            );
+        }
+    );
+}
 
-config.externalServices.forEach(
-    function (ext) {
-        makeRESTroute(ext);
-    }
-);
+if (config.externalServices) {
+    config.externalServices.forEach(
+        function (ext) {
+            makeRESTroute(ext);
+        }
+    );
+}
 
 console.log(
     "\nREST DB online.\n%s\n",
@@ -402,22 +406,6 @@ function makeQueryRoute (dbname, qname, qtmpl) {
 
 function makeRESTroute (foreigner) {
     var fname = foreigner.name;
-
-    var foo = {
-        "external_services": [
-            {
-                "name": "WorldBank",
-                "baseURI": "http://api.worldbank.org/countries",
-                "routes": [
-                    {
-                        "method": "get",
-                        "localpath": "/countrydata/$country/$fromYear/$toYear",
-                        "path": "/$country/indicators/NY.GDP.PCAP.CD?format=jsonp&prefix=?&date=$fromYear:$toYear"
-                    }
-                ]
-            }
-        ]
-    };
 
     templates.rest[fname] = { };
 

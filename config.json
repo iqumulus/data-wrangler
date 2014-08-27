@@ -1,6 +1,6 @@
 {
     "host": "0.0.0.0",
-    "port": 4400,
+    "port": 4401,
     "ssl": {
         "enabled": false,
         "ca": ".crt",
@@ -14,12 +14,14 @@
             "host": "localhost",
             "database": "playground",
             "user": "turtlekitty",
-            "password": "",
+            "password": "playfoonball",
             "queries": {
+                "listBrawlers": "select name, brawn, brains, moves, cool, karma from brawler",
                 "getBrawler": "select * from brawler where id = ?",
                 "getBrawlerPowers": "select b.name as brawler, p.name, p.type, p.rank from brawler b inner join power p on (b.id = p.brawler_id) where b.id = ?",
                 "getBrawlerGear": "select b.name as brawler, g.name from brawler b inner join brawler_gear bg on (b.id = bg.brawler_id) inner join gear g on (bg.gear_id = g.id) where b.id = ?",
                 "getBrawlerWhere": "select * from brawler where brawn >= ?",
+                "getBrawlerAndPowers": "select name, brawn, brains, moves, cool, karma, (select name, type, rank from power where brawler_id = brawler.id) as powers from brawler",
                 "getXfromYwhereZisQ": "select $x from $y where $z = '$q'"
             }
         },
@@ -29,7 +31,7 @@
             "host": "localhost",
             "database": "foobarbaz",
             "user": "turtlekitty",
-            "password": "",
+            "password": "playfoonball",
             "queries": {
                 "descTable": "desc $table",
                 "getFoo": "select * from foo where id = ?",
@@ -37,6 +39,20 @@
                 "getStuff": "select * from $relation where $field = ?"
             }
         }
+    ],
+    "externalServices": [
+        {
+            "name": "WorldBank",
+            "baseURI": "http://api.worldbank.org/countries",
+            "routes": [
+                {
+                    "method": "get",
+                    "localpath": "/countrydata/$country/$fromYear/$toYear",
+                    "path": "/{{ country }}/indicators/NY.GDP.PCAP.CD?format=json&date={{ fromYear }}:{{ toYear }}"
+                }
+            ]
+        }
     ]
 }
+
 
