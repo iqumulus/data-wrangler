@@ -39,21 +39,16 @@ var
     hb = require('handlebars'),
     moment = require('moment'),
     nodeDBI = require('node-dbi'),
+    clog = console.log,
+    cerr = console.error,
+    fmt = util.format,
     dbs = { },
     templates = {
         queries: { },
         rest: { }
     },
     queryinfo = { },
-    clog = console.log,
-    cerr = console.error,
-    fmt = util.format,
-    sqlhttpMap = {
-        select: 'get',
-        insert: 'put',
-        update: 'post',
-        delete: 'del'
-    },
+    plugins = { },
     whitespaceRegex = /\s+/,
     alphaNumericRegex = /^[\sA-Za-z0-9_\-.]+$/,
     uuidRegex = /^[A-Fa-f0-9]{8}-?[A-Fa-f0-9]{4}-?[A-Fa-f0-9]{4}-?[A-Fa-f0-9]{4}-?[A-Fa-f0-9]{12}$/,
@@ -62,6 +57,9 @@ var
     subQueryRegex = /\(\s*select.*?\)/gi,
     selectRegex = /^\s*select\s+(.+)\s+from.*$/i
 ;
+
+
+// setup Express server and routes
 
 server.use(gateKeeper());
 server.use(express.bodyParser());
@@ -74,16 +72,18 @@ server.on('error', function (err) {
 
 server.get('/', showAPI);
 
-/*
-server.post('/db/:db/rel/:relation', addRecord);
 
-server.get('/db/:db/rel/:relation', getRecordList);
-server.get('/db/:db/rel/:relation/:id', getRecord);
-server.get('/db/:db/rel/:relation/:id/:subrelation', getSubRecordList);
+if (config.genericCRUD) {
+    server.post('/db/:db/rel/:relation', addRecord);
 
-server.post('/db/:db/rel/:relation/:id', updateRecord);
-server.del('/db/:db/rel/:relation/:id', deleteRecord);
-*/
+    server.get('/db/:db/rel/:relation', getRecordList);
+    server.get('/db/:db/rel/:relation/:id', getRecord);
+    server.get('/db/:db/rel/:relation/:id/:subrelation', getSubRecordList);
+
+    server.post('/db/:db/rel/:relation/:id', updateRecord);
+    server.del('/db/:db/rel/:relation/:id', deleteRecord);
+}
+
 
 if (config.databases) {
     config.databases.forEach(
@@ -100,6 +100,7 @@ if (config.databases) {
     );
 }
 
+
 if (config.externalServices) {
     config.externalServices.forEach(
         function (ext) {
@@ -107,6 +108,25 @@ if (config.externalServices) {
         }
     );
 }
+
+
+if (config.activePlugins) {
+    config.activePlugins.forEach(
+        function (pname) {
+            var plug   = require('./plugins/' + pname);
+            var routes = plug.routes();
+
+            routes.forEach(
+                function (r) {
+                    server[r.method](r.path, r.proc);
+                }
+            );
+
+            plugins[pname] = plug;
+        }
+    );
+}
+
 
 console.log(
     "\nREST DB online.\n%s\n",
@@ -651,5 +671,4 @@ function updateRecord (req, res) {
 function deleteRecord( req, res) {
     itSucks(res, "NIY");
 }
-
 
