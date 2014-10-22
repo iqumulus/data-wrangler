@@ -35,10 +35,15 @@ var
     util = require('util'),
     express = require('express'),
     requester = require('request'),
-    server = express(),
     hb = require('handlebars'),
     moment = require('moment'),
     nodeDBI = require('node-dbi'),
+    uuid = require('node-uuid'),
+    session = require('./lib/session'),
+    argv = require('yargs').argv,
+    server = express(),
+    debugMode = argv.debug ? true  : false,
+    listenPort = debugMode ? 4401 : config.port,
     clog = console.log,
     cerr = console.error,
     fmt = util.format,
@@ -49,6 +54,7 @@ var
     },
     queryinfo = { },
     plugins = { },
+    sessions = { },
     whitespaceRegex = /\s+/,
     alphaNumericRegex = /^[\sA-Za-z0-9_\-.]+$/,
     uuidRegex = /^[A-Fa-f0-9]{8}-?[A-Fa-f0-9]{4}-?[A-Fa-f0-9]{4}-?[A-Fa-f0-9]{4}-?[A-Fa-f0-9]{12}$/,
@@ -67,10 +73,11 @@ server.use(express.cookieParser());
 server.use(express.logger());
 
 server.on('error', function (err) {
-    console.error(err.message);
+    cerr(err.message);
 });
 
 server.get('/', showAPI);
+server.post('/auth', authenticate);
 
 
 if (config.genericCRUD) {
@@ -118,7 +125,8 @@ if (config.activePlugins) {
 
             routes.forEach(
                 function (r) {
-                    server[r.method](r.path, r.proc);
+                    var path = '/' + pname + r.path;
+                    server[r.method](path, r.proc);
                 }
             );
 
@@ -128,12 +136,22 @@ if (config.activePlugins) {
 }
 
 
+if (config.ssl.enabled) {
+    var options = {
+        ca: [ fs.readFileSync(config.ssl.ca) ],
+        key:  fs.readFileSync(config.ssl.key),
+        cert: fs.readFileSync(config.ssl.cert)
+    };
+
+    https.createServer(options, server).listen(listenPort);
+} else {
+    http.createServer(server).listen(listenPort);
+}
+
 console.log(
     "\nREST DB online.\n%s\n",
     moment().format('MMMM Do YYYY, h:mm:ss a')
 );
-
-http.createServer(server).listen(config.port);
 
 
 // utils
@@ -148,36 +166,27 @@ function gateKeeper () {
 
         if ('OPTIONS' === req.method) {
           return res.send(200);
-        }    
+        }
+
+        var token = req.param('token') || null;
+
+        if (!token) {
+            if (req.body) {
+                token = req.body.token;
+            }
+        }
+
+cerr('TOKEN: %s', token);
+        if (token && sessions[token]) {
+            req.iq = sessions[token];
+        }
+        else {
+            req.iq = session.create(token);
+        }
 
         return next();
-
-        // current unused authentication stuff
-
-        var token = req.cookies.portal_auth || common.getp(req, 'token');
-
-        isLoggedIn(
-            token,
-            function (session) {
-
-                if (session) {
-                    req.iqumulus.session = session;
-                }    
-
-                if (isUnrestricted(req)) {
-                    return next();
-                }    
-
-                if (!session) {
-                    console.log('GateKeeper denied access');
-                    return sendHome(res, 'Access Denied');
-                }    
-
-                return next();
-            }    
-        );   
-    };   
-}    
+    };
+}
 
 function ifNull (x, defaultVal) {
     if (x === null || x === undefined) {
@@ -668,7 +677,54 @@ function updateRecord (req, res) {
     itSucks(res, "NIY");
 }
 
-function deleteRecord( req, res) {
+function deleteRecord(req, res) {
     itSucks(res, "NIY");
 }
+
+function authenticate (req, res) {
+    var b = req.body,
+        token = b.token,
+        service = b.service,
+        auth = b.auth
+    ;
+
+    if (!token) {
+        token = uuid.v4();
+    }
+
+    if (service) {
+        if (!plugins[service]) {
+            return res.send({ ok: false, error: fmt("Service \"%s\" not found.", service) });
+        }
+
+        if (!auth) {
+            return res.send({ ok: false, error: fmt("Service auth info for \"%s\" not sent.", service) });
+        }
+
+        return plugins[service].auth(
+            auth,
+            function (rval) {
+                if (rval.ok) {
+                    // it's good!
+
+                    var s = sessions[token];
+
+                    if (!s) {
+                        s = session.create(token);
+                        sessions[token] = s;
+                    }
+
+                    s.put(service, rval.info);
+
+                    return res.send({ ok: true, token: token });
+                }
+
+                res.send(rval); // pass error along
+            }
+        );
+    }
+
+    res.send({ ok: true, token: token });
+}
+
 
