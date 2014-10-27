@@ -3,9 +3,9 @@
     "port": 4400,
     "ssl": {
         "enabled": false,
-        "ca": ".crt",
-        "key": ".key",
-        "cert": ".crt"
+        "ca": "/home/ssl/ca.crt",
+        "key": "/home/ssl/foo.key",
+        "cert": "/home/ssl/foo.crt"
     },
     "genericCRUD": true,
     "databases": [
@@ -15,7 +15,7 @@
             "host": "localhost",
             "database": "playground",
             "user": "turtlekitty",
-            "password": "playfoonball",
+            "password": "",
             "queries": {
                 "listBrawlers": "select name, brawn, brains, moves, cool, karma from brawler",
                 "getBrawler": "select * from brawler where id = ?",
@@ -32,7 +32,7 @@
             "host": "localhost",
             "database": "foobarbaz",
             "user": "turtlekitty",
-            "password": "playfoonball",
+            "password": "",
             "queries": {
                 "descTable": "desc $table",
                 "getFoo": "select * from foo where id = ?",

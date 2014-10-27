@@ -33,6 +33,7 @@ var
     http = require('http'),
     https = require('https'),
     util = require('util'),
+    domain = require('domain'),
     express = require('express'),
     requester = require('request'),
     hb = require('handlebars'),
@@ -73,6 +74,7 @@ server.use(express.cookieParser());
 server.use(express.logger());
 
 server.on('error', function (err) {
+    cerr("GLOBAL ERROR!!!");
     cerr(err.message);
 });
 
@@ -95,18 +97,36 @@ if (config.genericCRUD) {
 if (config.databases) {
     config.databases.forEach(
         function (db) {
-            dbs[db.name] = DBconnect(db);
+            var d = domain.create();
 
-            Object.keys(db.queries).forEach(
-                function (qname) {
-                    queryinfo[qname] = examineQuery(db.queries[qname]);
-                    makeQueryRoute(db.name, qname, db.queries[qname]);
+            d.on(
+                'error',
+                function (e) {
+                    if (e.code === '57P01' || e.code === 'PROTOCOL_CONNECTION_LOST') {
+                        cerr('DB connection "%s" terminated!  Reconnecting...', db.name);
+                        return connectThunk();
+                    }
+
+                    cerr('Uncaught DB error!');
+                    throw e;
                 }
             );
+
+            function connectThunk () {
+                dbs[db.name] = DBconnect(db);
+
+                Object.keys(db.queries).forEach(
+                    function (qname) {
+                        queryinfo[qname] = examineQuery(db.queries[qname]);
+                        makeQueryRoute(db.name, qname, db.queries[qname]);
+                    }
+                );
+            }
+
+            d.run(connectThunk);
         }
     );
 }
-
 
 if (config.externalServices) {
     config.externalServices.forEach(
@@ -156,6 +176,18 @@ console.log(
 
 // utils
 
+function showError (e) {
+    var x = { };
+
+    [ 'name', 'length', 'severity', 'code', 'file', 'line', 'routine', ].forEach(
+        function (k) {
+            x[k] = e[k];
+        }
+    );
+ 
+    cerr(x);
+}
+
 function gateKeeper () { 
     return function (req, res, next) {
         req.iqumulus = { }; 
@@ -176,7 +208,7 @@ function gateKeeper () {
             }
         }
 
-cerr('TOKEN: %s', token);
+//cerr('TOKEN: %s', token);
         if (token && sessions[token]) {
             req.iq = sessions[token];
         }
@@ -726,5 +758,4 @@ function authenticate (req, res) {
 
     res.send({ ok: true, token: token });
 }
-
 
