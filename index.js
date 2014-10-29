@@ -41,6 +41,7 @@ var
     nodeDBI = require('node-dbi'),
     uuid = require('node-uuid'),
     session = require('./lib/session'),
+    examiner = require('./lib/examiner'),
     argv = require('yargs').argv,
     server = express(),
     debugMode = argv.debug ? true  : false,
@@ -56,12 +57,10 @@ var
     queryinfo = { },
     plugins = { },
     sessions = { },
-    whitespaceRegex = /\s+/,
     alphaNumericRegex = /^[\sA-Za-z0-9_\-.]+$/,
     uuidRegex = /^[A-Fa-f0-9]{8}-?[A-Fa-f0-9]{4}-?[A-Fa-f0-9]{4}-?[A-Fa-f0-9]{4}-?[A-Fa-f0-9]{12}$/,
     sqlCommentRegex = /--+/g,
     queryVarRegex = /\$(\w+)/g,
-    subQueryRegex = /\(\s*select.*?\)/gi,
     selectRegex = /^\s*select\s+(.+)\s+from.*$/i
 ;
 
@@ -117,7 +116,7 @@ if (config.databases) {
 
                 Object.keys(db.queries).forEach(
                     function (qname) {
-                        queryinfo[qname] = examineQuery(db.queries[qname]);
+                        queryinfo[qname] = examiner.examineQuery(db.queries[qname]);
                         makeQueryRoute(db.name, qname, db.queries[qname]);
                     }
                 );
@@ -128,6 +127,7 @@ if (config.databases) {
     );
 }
 
+
 if (config.externalServices) {
     config.externalServices.forEach(
         function (ext) {
@@ -137,16 +137,21 @@ if (config.externalServices) {
 }
 
 
-if (config.activePlugins) {
-    config.activePlugins.forEach(
+if (config.plugins) {
+    Object.keys(config.plugins).forEach(
         function (pname) {
-            var plug   = require('./plugins/' + pname);
-            var routes = plug.routes();
+            var plug   = require('./plugins/' + pname),
+                routes = plug.routes(config.plugins[pname])
+            ;
 
             routes.forEach(
                 function (r) {
                     var path = '/' + pname + r.path;
                     server[r.method](path, r.proc);
+
+                    if (r.fields) {
+
+                    }
                 }
             );
 
@@ -220,14 +225,6 @@ function gateKeeper () {
     };
 }
 
-function ifNull (x, defaultVal) {
-    if (x === null || x === undefined) {
-        return defaultVal;
-    }
-
-    return x;
-}
-
 function emptyfilter (xs) {
     return xs.filter(
         function (x) {
@@ -260,16 +257,8 @@ function query (db, query, args, fn) {
     );
 }
 
-function numQuestions (query) {
-    return ifNull(query.match(/\?/g), []).length;
-}
-
 function isAlphaNumeric (x) {
     return alphaNumericRegex.test(x);
-}
-
-function isUUID (x) {
-    return uuidRegex.test(x);
 }
 
 function itsGood (res, rvals) {
@@ -282,134 +271,14 @@ function itSucks (res, error) {
     res.send({ ok: false, error: error });
 }
 
-function parseColspec (text) {
-    var chars = text.split('')
-        holder = [ ],
-        cols = [ ]
-    ;
-
-    function parseFunk (chars) {
-        var holder = [ ];
-
-        while (chars.length > 0) {
-            var c = chars.shift();
-
-            if (c === '(') {
-                holder.push(c, parseFunk( chars ) );
-            }
-            else if (c === ')') {
-                holder.push(c);
-                return holder.join('');
-            }
-            else {
-                holder.push(c);
-            }
-        }
-
-        console.error('Unmatched "("!');
-
-        return holder.join('');
-    }
-
-    function mutate () {
-        cols.push( holder.join('').trim() );
-    }
-
-    while (chars.length > 0) {
-        var c = chars.shift();
-
-        if (c === ',') {
-            mutate();
-            holder = [ ];
-        }
-        else {
-            if (c === '(') {
-                holder.push(c, parseFunk( chars ) );
-            }
-            else {
-                holder.push(c);
-            }
-        }
-    }
-
-    if (holder.length > 0) {
-        mutate();
-    }
-
-    return cols;
-}
-
-function examineQuery(query) {
-    var fields = [];
-
-    if (selectRegex.test(query)) {
-        var colspec = selectRegex.exec(query)[1],
-            things = parseColspec(colspec)
-        ;
-
-        things.forEach(
-            function (thing) {
-                var newf = whitespaceRegex.test(thing)
-                         ? thing.split(whitespaceRegex).pop()
-                         : thing.split('.').pop()
-                ;
-
-                fields.push(newf);
-            }
-        );
-    }
-
-    return fields;
-}
-
-function validateQueryVars (req, qvars) {
-    var
-        qvals = { },
-        fail = []
-    ;
-
-    qvars.forEach(
-        function (qv) {
-            var val = req.param(qv);
-
-            if (!val) {
-                fail.push( fmt('Parameter "%s" is required!\n', qv) );
-                return;
-            }
-
-            if (sqlCommentRegex.test(val)) {
-                fail.push('SQL comments are forbidden as inputs.');
-                return;
-            }
-
-            if (! (isUUID(val) || isAlphaNumeric(val)) ) {
-                fail.push('Query parameters must be alphanumeric.');
-                return;
-            }
-
-            qvals[qv] = val;
-        }
-    );
-
-    if (fail.length > 0) {
-        return { ok: false, error: fail.join('\n') };
-    }
-
-    return { ok: true, results: qvals };
-}
-
-function strip$ (x) {
-    return x.replace('$', '');
-}
-
 function makeQueryRoute (dbname, qname, qtmpl) {
     var
-        numParams = numQuestions(qtmpl),
-        qvars = ifNull(qtmpl.match(queryVarRegex), []).map(strip$),
+        numParams = examiner.numQuestions(qtmpl),
+        qvars = examiner.findQvars(qtmpl),
         qyarr = [ ]
     ;
 
-    templates.queries[qname] = hb.compile( qtmpl.replace(queryVarRegex, '{{ $1 }}') );
+    templates.queries[qname] = examiner.tmplify(qtmpl);
 
     for (var i = 1; i <= numParams; i++) {
         qyarr[i] = '/:p' + i;
@@ -421,11 +290,10 @@ function makeQueryRoute (dbname, qname, qtmpl) {
         routePath,
         function (req, res) {
             var args = [ ],
-                qvals = { },
-                fail = ''
+                qvals = { }
             ;
 
-            var checkIt = validateQueryVars(req, qvars);
+            var checkIt = examiner.validateQueryVars(req, qvars);
 
             if (checkIt.ok) {
                 qvals = checkIt.results;
@@ -472,7 +340,7 @@ function makeRESTroute (foreigner) {
 
     foreigner.routes.forEach(
         function (r) {
-            var qvars = ifNull(r.localpath.match(queryVarRegex), []).map(strip$),
+            var qvars = examiner.findQvars(r.localpath),
                 lpath = r.localpath.replace(queryVarRegex, ':$1')
             ;
 
@@ -484,7 +352,7 @@ function makeRESTroute (foreigner) {
                     var remotePath = lpath;
 
                     if (qvars.length > 0) {
-                        var checkIt = validateQueryVars(req, qvars);
+                        var checkIt = examiner.validateQueryVars(req, qvars);
 
                         if (checkIt.ok) {
                             qvals = checkIt.results;

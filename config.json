@@ -54,7 +54,14 @@
             ]
         }
     ],
-    "activePlugins": [ "salesforce" ]
+    "plugins": {
+        "salesforce": {
+            "queries": {
+                "accounts": "select id, name from account",
+                "fromwhat": "select * from $what"
+            }
+        }
+    }
 }
 
 

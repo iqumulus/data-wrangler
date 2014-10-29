@@ -1,7 +1,10 @@
 
 var
+    util = require('util'),
+    fmt = util.format,
     clog = console.log,
     cerr = console.error,
+    examiner = require('../lib/examiner'),
     jsforce = require('jsforce')
 ;
 
@@ -47,43 +50,69 @@ clog("UINFO (2): %j", uinfo);
     );
 }
 
-function routes () {
-    return [
-        { method: 'get', path: '/query', proc: sfQuery }
-    ];
-}
+function routes (conf) {
+    var fields = [ ];
 
-function sfQuery (req, res) {
-clog('SFQUERY');
-    var info = req.iq.get('salesforce');
-
-    if (!info) {
-        return res.send({ ok: false, error: "Query: SalesForce auth info not found." });
+    if (!conf.queries) {
+        return [];
     }
 
-    if (!info.conn) {
-        return res.send({ ok: false, error: "Query: No SalesForce connection?!" });
-    }
+    return Object.keys(conf.queries).map(
+        function (qname) {
+            var qtmpl = conf.queries[qname],
+                fields = examiner.examineQuery(qtmpl),
+                qvars = examiner.findQvars(qtmpl),
+                rpath = fmt('/query/%s', qname),
+                template = examiner.tmplify(qtmpl),
+                rproc = sfQueryRoute(template, qvars)
+            ;
 
-clog("QUERY: %s", req.param('q'));
-
-    var
-        conn = info.conn,
-        p = conn.query(req.param('q'))
-    ;
-
-    // promises, promises...
-
-    p.then(
-        function(result) {
-            res.send({ ok: true, result: result});
-        },
-        function (e) {
-            cerr('Salesforce query error: %j', e);
-            res.send({ ok: false, error: e });
+            return { method: 'get', path: rpath, proc: rproc, fields: fields }
         }
     );
 }
 
+function sfQueryRoute (template, qvars) {
+    return function (req, res) {
+clog('SFQUERY');
+        var info = req.iq.get('salesforce'), // req.iq holds the session
+            args = [ ],
+            qvals = { }
+        ;
 
+        if (!info) {
+            return res.send({ ok: false, error: "Query: SalesForce auth info not found." });
+        }
+
+        if (!info.conn) {
+            return res.send({ ok: false, error: "Query: No SalesForce connection?!" });
+        }
+
+        var checkIt = examiner.validateQueryVars(req, qvars);
+
+        if (checkIt.ok) {
+            qvals = checkIt.results;
+        }
+        else {
+            return res.send({ ok: false, error: checkIt.error });
+        }
+
+        var qtext = template(qvals),
+            conn = info.conn,
+            p = conn.query(qtext)
+        ;
+
+        // promises, promises...
+
+        p.then(
+            function(result) {
+                res.send({ ok: true, result: result});
+            },
+            function (e) {
+                cerr('Salesforce query error: %j', e);
+                res.send({ ok: false, error: e });
+            }
+        );
+    };
+}
 
