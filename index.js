@@ -147,6 +147,7 @@ if (config.plugins) {
             routes.forEach(
                 function (r) {
                     var path = '/' + pname + r.path;
+
                     server[r.method](path, r.proc);
 
                     if (r.fields) {
@@ -195,8 +196,6 @@ function showError (e) {
 
 function gateKeeper () { 
     return function (req, res, next) {
-        req.iqumulus = { }; 
-
         res.header('Access-Control-Allow-Origin', '*');
         res.header('Access-Control-Allow-Methods', 'GET,PUT,POST,DELETE,OPTIONS');
         res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, Content-Length, X-Requested-With');
@@ -213,7 +212,6 @@ function gateKeeper () {
             }
         }
 
-//cerr('TOKEN: %s', token);
         if (token && sessions[token]) {
             req.iq = sessions[token];
         }
@@ -468,7 +466,7 @@ function getRecordList (req, res) {
      
     var offset = limit * (page - 1);
 
-    var query = util.format('select * from %s order by %s offset %d limit %d', relation, sortby, offset, limit);
+    var query = util.format('select * from %s order by %s limit %d offset %d', relation, sortby, limit, offset);
 
     dbs[dbname].fetchAll(
         query,

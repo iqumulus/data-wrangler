@@ -2,41 +2,38 @@
     "host": "0.0.0.0",
     "port": 4400,
     "ssl": {
-        "enabled": false,
-        "ca": "/home/ssl/ca.crt",
-        "key": "/home/ssl/foo.key",
-        "cert": "/home/ssl/foo.crt"
+        "enabled": true,
+        "ca": "/home/ssl/certificate_authority.crt",
+        "key": "/home/ssl/myKey.key",
+        "cert": "/home/ssl/myCert.crt"
     },
     "genericCRUD": true,
     "databases": [
         {
-            "name": "brawlers",
+            "name": "billing",
             "type": "pg",
-            "host": "localhost",
-            "database": "playground",
-            "user": "turtlekitty",
-            "password": "",
+            "host": "billing.example.com",
+            "database": "our_billing",
+            "user": "fozzy",
+            "password": "wakkawakkawakka",
             "queries": {
-                "listBrawlers": "select name, brawn, brains, moves, cool, karma from brawler",
-                "getBrawler": "select * from brawler where id = ?",
-                "getBrawlerPowers": "select b.name as brawler, p.name, p.type, p.rank from brawler b inner join power p on (b.id = p.brawler_id) where b.id = ?",
-                "getBrawlerGear": "select b.name as brawler, g.name from brawler b inner join brawler_gear bg on (b.id = bg.brawler_id) inner join gear g on (bg.gear_id = g.id) where b.id = ?",
-                "getBrawlerWhere": "select * from brawler where brawn >= ?",
-                "getBrawlerAndPowers": "select name, brawn, brains, moves, cool, karma, (select name, type, rank from power where brawler_id = brawler.id) as powers from brawler",
+                "invoices": "select * from invoices where date = ?",
+                "lineitems": "select * from line_items where invoice_id = ?",
+                "anyById": "select * from $table where id = ?",
                 "getXfromYwhereZisQ": "select $x from $y where $z = '$q'"
             }
         },
         {
-            "name": "foo",
+            "name": "support",
             "type": "mysql",
-            "host": "localhost",
-            "database": "foobarbaz",
-            "user": "turtlekitty",
-            "password": "",
+            "host": "support.example.com",
+            "database": "suppert_db",
+            "user": "kermit",
+            "password": "Hi, Ho! Kermit the Frog here!",
             "queries": {
                 "descTable": "desc $table",
-                "getFoo": "select * from foo where id = ?",
-                "getFooBars": "select bar.id, bar.rank from foo inner join bar on (foo.id = bar.foo_id) where foo.id = ?",
+                "ticket": "select * from ticket where id = ?",
+                "ticketAnswers": "select t.id, a.* from ticket t inner join answer a on (t.id = a.ticket_id) where t.id = ?",
                 "getStuff": "select * from $relation where $field = ?"
             }
         }
@@ -57,8 +54,8 @@
     "plugins": {
         "salesforce": {
             "queries": {
-                "accounts": "select id, name from account",
-                "fromwhat": "select * from $what"
+                "accounts": "select id, accountnumber, name from account",
+                "fromwhat": "select id from $what"
             }
         }
     }

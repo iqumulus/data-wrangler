@@ -20,7 +20,6 @@ function auth (info, fn) {
         info.username,
         info.password,
         function(err, uinfo) {
-clog("UINFO (1): %j", uinfo);
             if (err) {
                 cerr('Salesforce auth error (1): %j', err);
 
@@ -28,7 +27,6 @@ clog("UINFO (1): %j", uinfo);
                     info.username,
                     info.password + info.securityToken,
                     function (e, uinfo) {
-clog("UINFO (2): %j", uinfo);
                         if (e) {
                             cerr('Salesforce auth error (2): %j', e);
                             return fn({ ok: false, error: e });
@@ -73,19 +71,22 @@ function routes (conf) {
 }
 
 function sfQueryRoute (template, qvars) {
-    return function (req, res) {
-clog('SFQUERY');
+    function mahRoute (req, res) {
         var info = req.iq.get('salesforce'), // req.iq holds the session
             args = [ ],
             qvals = { }
         ;
 
+        function blorg (e) {
+            res.send({ ok: false, error: e });
+        }
+
         if (!info) {
-            return res.send({ ok: false, error: "Query: SalesForce auth info not found." });
+            return blorg("Query: SalesForce auth info not found.");
         }
 
         if (!info.conn) {
-            return res.send({ ok: false, error: "Query: No SalesForce connection?!" });
+            return blorg("Query: No SalesForce connection?!");
         }
 
         var checkIt = examiner.validateQueryVars(req, qvars);
@@ -94,7 +95,7 @@ clog('SFQUERY');
             qvals = checkIt.results;
         }
         else {
-            return res.send({ ok: false, error: checkIt.error });
+            return blorg(checkIt.error);
         }
 
         var qtext = template(qvals),
@@ -110,9 +111,11 @@ clog('SFQUERY');
             },
             function (e) {
                 cerr('Salesforce query error: %j', e);
-                res.send({ ok: false, error: e });
+                blorg(e);
             }
         );
-    };
+    }
+
+    return mahRoute;
 }
 

@@ -29,7 +29,7 @@ cd to the wrangler directory and execute
     npm install
 
 
-Step 5: Install the init script
+Step 5: Install the init script (SysV-based linux installs - others will require adjustment)
 
     cp data-wrangler/iqdatawrangler.init.d /etc/init.d/iqdatawrangler
     chkconfig --add iqdatawrangler
@@ -39,46 +39,76 @@ Step 6: Place desired configuration into data-wrangler/config.json
 
 The config file looks like this:
 
-    {
-        "host": "0.0.0.0",
-        "port": 443,
-        "ssl": {
-            "enabled": true,
-            "ca": "example.crt",
-            "key": "example.key",
-            "cert": "example.crt"
-        },
-        "databases": [
-            {
-                "name": "zang",
-                "type": "pg",
-                "host": "localhost",
-                "database": "playground",
-                "user": "turtlekitty",
-                "password": "wakkawakkawakka",
-                "queries": {
-                    "getZang": "select * from zang where id = ?",
-                    "getZangPowers": "select z.name as zang, p.name, p.type, p.rank from zang z inner join power p on (z.id = p.brawler_id) where z.id = ?",
-                }
-            },
-            {
-                "name": "foo",
-                "type": "mysql",
-                "host": "localhost",
-                "database": "foobarbaz",
-                "user": "turtlekitty",
-                "password": "wakkawakkawakka",
-                "queries": {
-                    "descTable": "desc $table",
-                    "getFoo": "select * from foo where id = ?",
-                    "getFooBars": "select bar.id, bar.rank from foo inner join bar on (foo.id = bar.foo_id) where foo.id = ?",
-                    "getStuff": "select * from $relation where $field = ?"
-                }
+```json
+
+{
+    "host": "0.0.0.0",
+    "port": 4400,
+    "ssl": {
+        "enabled": true,
+        "ca": "/home/ssl/certificate_authority.crt",
+        "key": "/home/ssl/myKey.key",
+        "cert": "/home/ssl/myCert.crt"
+    },
+    "genericCRUD": true,
+    "databases": [
+        {
+            "name": "billing",
+            "type": "pg",
+            "host": "billing.example.com",
+            "database": "our_billing",
+            "user": "fozzy",
+            "password": "wakkawakkawakka",
+            "queries": {
+                "invoices": "select * from invoices where date = ?",
+                "lineitems": "select * from line_items where invoice_id = ?",
+                "anyById": "select * from $table where id = ?",
+                "getXfromYwhereZisQ": "select $x from $y where $z = '$q'"
             }
-        ]
+        },
+        {
+            "name": "support",
+            "type": "mysql",
+            "host": "support.example.com",
+            "database": "suppert_db",
+            "user": "kermit",
+            "password": "Hi, Ho! Kermit the Frog here!",
+            "queries": {
+                "descTable": "desc $table",
+                "ticket": "select * from ticket where id = ?",
+                "ticketAnswers": "select t.id, a.* from ticket t inner join answer a on (t.id = a.ticket_id) where t.id = ?",
+                "getStuff": "select * from $relation where $field = ?"
+            }
+        }
+    ],
+    "externalServices": [
+        {
+            "name": "WorldBank",
+            "baseURI": "http://api.worldbank.org/countries",
+            "routes": [
+                {
+                    "method": "get",
+                    "localpath": "/countrydata/$country/$fromYear/$toYear",
+                    "path": "/{{ country }}/indicators/NY.GDP.PCAP.CD?format=json&date={{ fromYear }}:{{ toYear }}"
+                }
+            ]
+        }
+    ],
+    "plugins": {
+        "salesforce": {
+            "queries": {
+                "accounts": "select id, accountnumber, name from account",
+                "fromwhat": "select id from $what"
+            }
+        }
     }
+}
+
+
+```
 
 The toplevel "host", "port", and "ssl" keys tell the wrangler where to listen and whether to use SSL.
+SSL is strongly recommended if the wrangler is to be exposed on a public interface.
 
 Each entry in the array of databases requires these fields:
 
@@ -170,4 +200,122 @@ One can mix positional variables and named parameters:
     ->
 
     /query/getStuff/4?relation=foo&field=id
+
+
+### Generic CRUD operations
+
+If "genericCRUD" is set to true in the config file, a number of routes will be created:
+
+GET "/db/:db/rel/:relation"
+
+Get a list of rows from an arbitrary relation in the database identified by :db (this is the "name" field in the config file).
+This route requires :db and :relation parameters to be defined in the path.
+Optional query string parameters:
+    page (page number)
+    perpage (rows per page)
+    sortby (column by which to order results)
+
+Example: curl 'https://dev.iqumulus.com:4400/db/billing/rel/invoice?perpage=10&page=2&sortby=date'
+
+```json
+{
+    ok: true,
+    results: [
+        { "id": 1, "date": "2014-10-01", "amount": "33.00" },
+        ...
+    ]
+}
+```
+
+
+GET "/db/:db/rel/:relation/:id"
+
+Gets a single record from the named :db and :relation.  The relation must have an "id" column.
+
+Example: curl 'https://dev.iqumulus.com:4400/db/support/rel/ticket/42'
+
+```json
+{
+    ok: true,
+    row: {
+        "id": 1,
+        "date": "2014-10-02",
+        "subject": "All the things are broken!",
+        ...
+    }
+}
+```
+
+GET "/db/:db/rel/:relation/:id/:subrelation"
+
+Gets a list of records tied to a parent record.  The subrelation must reference the parent with a column like "<parent-name>_id".
+
+Example: curl 'https://dev.iqumulus.com:4400/db/billing/rel/invoice/42/linetems'
+
+```json
+{
+    ok: true,
+    results: [
+        { "id": 101, "invoice_id": 42, "item_id": 37, "quantity": "99" },
+        ...
+    ]
+}
+```
+
+
+### External REST APIs
+
+External services can be piped through the wrangler.
+
+Each service object (in the "externalServices" array in the config file) must have a name, a baseURI, and a list of routes, like so:
+
+```json
+{
+    "name": "WorldBank",
+    "baseURI": "http://api.worldbank.org/countries",
+    "routes": [
+        {
+            "method": "get",
+            "localpath": "/countrydata/$country/$fromYear/$toYear",
+            "path": "/{{ country }}/indicators/NY.GDP.PCAP.CD?format=json&date={{ fromYear }}:{{ toYear }}"
+        }
+    ]
+}
+```
+
+For each route:
+    "method": should be an HTTP verb - get, post, put, delete, etc.
+    "localpath": is the path exposed by the wrangler.  This can contain $-variables, which can be substituted into the...
+    "path": The path to gather info from the external API.
+
+Example: curl 'https://dev.iqumulus.com:4400/ffi/WorldBank/countrydata/US/2005/2006'
+
+```json
+[
+    {"page":1,"pages":1,"per_page":"50","total":2},
+    [
+        {
+            "indicator": {"id":"NY.GDP.PCAP.CD","value":"GDP per capita (current US$)"},
+            "country": {"id":"US","value":"United States"},
+            "value":"46443.81019859",
+            "decimal":"0",
+            "date":"2006"
+        },
+        {
+            "indicator":{"id":"NY.GDP.PCAP.CD","value":"GDP per capita (current US$)"},
+            "country":{"id":"US","value":"United States"},
+            "value":"44313.5852412812",
+            "decimal":"0",
+            "date":"2005"
+        }
+    ]
+]
+```
+
+
+### Plugins
+
+The wrangler has a plugin system for future expansion.
+
+
 
