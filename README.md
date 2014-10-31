@@ -248,7 +248,7 @@ Example: curl 'https://dev.iqumulus.com:4400/db/support/rel/ticket/42'
 
 GET "/db/:db/rel/:relation/:id/:subrelation"
 
-Gets a list of records tied to a parent record.  The subrelation must reference the parent with a column like "<parent-name>_id".
+Gets a list of records tied to a parent record.  The subrelation must reference the parent with a column like "[parent-name]_id".
 
 Example: curl 'https://dev.iqumulus.com:4400/db/billing/rel/invoice/42/linetems'
 
@@ -261,6 +261,8 @@ Example: curl 'https://dev.iqumulus.com:4400/db/billing/rel/invoice/42/linetems'
     ]
 }
 ```
+
+The routes for generic row creation, modification, and deletion are not yet implemented.
 
 
 ### External REST APIs
