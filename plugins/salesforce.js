@@ -19,7 +19,7 @@ function auth (info, fn) {
     sfconn.login(
         info.username,
         info.password,
-        function(err, uinfo) {
+        function (err, uinfo) {
             if (err) {
                 cerr('Salesforce auth error (1): %j', err);
 
@@ -106,8 +106,8 @@ function sfQueryRoute (template, qvars) {
         // promises, promises...
 
         p.then(
-            function(result) {
-                res.send({ ok: true, result: result});
+            function (results) {
+                res.send({ ok: true, results: results });
             },
             function (e) {
                 cerr('Salesforce query error: %j', e);
