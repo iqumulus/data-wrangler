@@ -1,8 +1,8 @@
 {
     "author": "IQumulus LLC",
     "name": "iq-data-wrangler",
-    "description": "IQ data source abstraction",
-    "version": "0.0.1",
+    "description": "Data source abstraction and aggregation tool",
+    "version": "1.0.0",
     "private": true,
     "main": "index.js",
     "bin": { },

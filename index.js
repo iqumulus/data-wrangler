@@ -54,14 +54,11 @@ var
         queries: { },
         rest: { }
     },
-    queryinfo = { },
+    queryInfo = { },
+    legacyQinfo = { },
     plugins = { },
     sessions = { },
-    alphaNumericRegex = /^[\sA-Za-z0-9_\-.]+$/,
-    uuidRegex = /^[A-Fa-f0-9]{8}-?[A-Fa-f0-9]{4}-?[A-Fa-f0-9]{4}-?[A-Fa-f0-9]{4}-?[A-Fa-f0-9]{12}$/,
-    sqlCommentRegex = /--+/g,
-    queryVarRegex = /\$(\w+)/g,
-    selectRegex = /^\s*select\s+(.+)\s+from.*$/i
+    queryVarRegex = /\$(\w+)/g
 ;
 
 
@@ -113,10 +110,13 @@ if (config.databases) {
 
             function connectThunk () {
                 dbs[db.name] = DBconnect(db);
+                queryInfo[db.name] = { };
 
                 Object.keys(db.queries).forEach(
                     function (qname) {
-                        queryinfo[qname] = examiner.examineQuery(db.queries[qname]);
+                        var info = examiner.examineQuery(db.queries[qname]);
+                        legacyQinfo[qname] = info;
+                        queryInfo[db.name][qname] = info;
                         makeQueryRoute(db.name, qname, db.queries[qname]);
                     }
                 );
@@ -174,8 +174,9 @@ if (config.ssl.enabled) {
     http.createServer(server).listen(listenPort);
 }
 
+
 console.log(
-    "\nREST DB online.\n%s\n",
+    "\nIQumulus Data Wrangler online.\n%s\n",
     moment().format('MMMM Do YYYY, h:mm:ss a')
 );
 
@@ -255,17 +256,13 @@ function query (db, query, args, fn) {
     );
 }
 
-function isAlphaNumeric (x) {
-    return alphaNumericRegex.test(x);
-}
-
 function itsGood (res, rvals) {
     var sendMe = rvals || { };
     sendMe.ok = true;
     res.send(sendMe);
 }
 
-function itSucks (res, error) {
+function sendError (res, error) {
     res.send({ ok: false, error: error });
 }
 
@@ -282,53 +279,54 @@ function makeQueryRoute (dbname, qname, qtmpl) {
         qyarr[i] = '/:p' + i;
     }
 
-    var routePath = [ fmt('/query/%s', qname) ].concat(qyarr).join('');
+    function handler (req, res) {
+        var args = [ ],
+            qvals = { }
+        ;
 
-    server.get(
-        routePath,
-        function (req, res) {
-            var args = [ ],
-                qvals = { }
-            ;
+        var checkIt = examiner.validateQueryVars(req, qvars);
 
-            var checkIt = examiner.validateQueryVars(req, qvars);
-
-            if (checkIt.ok) {
-                qvals = checkIt.results;
-            }
-            else {
-                return itSucks(res, checkIt.error);
-            }
-
-            for (var i = 1; i <= numParams; i++) {
-                var val = req.param( 'p' + i );
-
-                if (!val) {
-                    return itSucks(res, fmt('Missing parameter: %s', 'p' + i));
-                }
-
-                args.push(val);
-            }
-
-            var qtext = (qvars.length > 0)
-                      ? templates.queries[qname](qvals)
-                      : qtmpl
-            ;
-
-            query(
-                dbs[dbname],
-                qtext,
-                args,
-                function (e, results) {
-                    if (e) {
-                        return itSucks(res, e);
-                    }
-
-                    itsGood(res, { results: results });
-                }
-            );
+        if (checkIt.ok) {
+            qvals = checkIt.results;
         }
-    );
+        else {
+            return sendError(res, checkIt.error);
+        }
+
+        for (var i = 1; i <= numParams; i++) {
+            var val = req.param( 'p' + i );
+
+            if (!val) {
+                return sendError(res, fmt('Missing parameter: %s', 'p' + i));
+            }
+
+            args.push(val);
+        }
+
+        var qtext = (qvars.length > 0)
+                  ? templates.queries[qname](qvals)
+                  : qtmpl
+        ;
+
+        query(
+            dbs[dbname],
+            qtext,
+            args,
+            function (e, results) {
+                if (e) {
+                    return sendError(res, e);
+                }
+
+                itsGood(res, { results: results });
+            }
+        );
+    }
+
+    var legacyRoutePath = [ fmt('/query/%s', qname) ].concat(qyarr).join('');
+    var routePath = [ fmt('/q/%s/%s', dbname, qname) ].concat(qyarr).join('');
+
+    server.get(routePath, handler);
+    server.get(legacyRoutePath, handler);
 }
 
 function makeRESTroute (foreigner) {
@@ -356,7 +354,7 @@ function makeRESTroute (foreigner) {
                             qvals = checkIt.results;
                         }
                         else {
-                            return itSucks(res, checkIt.error);
+                            return sendError(res, checkIt.error);
                         }
 
                         remotePath = templates.rest[fname][lpath](qvals);
@@ -382,22 +380,42 @@ function showAPI (req, res) {
                 function (r) {
                     var path = emptyfilter( r.path.split(/\//) );
 
-                    if (path[0] !== 'query') {
-                        return r;
+                    if (path[0] === 'query') {
+                        // legacy 
+
+                        var qname = path[1],
+                            qinfo = legacyQinfo[qname]
+                        ;
+
+                        if (!qinfo) {
+                            cerr('Query info not found for %s!', qname);
+                            return r;
+                        }
+
+                        r.dataType = {
+                            fields: qinfo
+                        };
                     }
 
-                    var qname = path[1],
-                        qinfo = queryinfo[qname]
-                    ;
+                    if (path[0] === 'q') {
+                        var dbname = path[1],
+                            qname = path[2]
+                            qinfo = null
+                        ;
 
-                    if (!qinfo) {
-                        cerr('Query info not found for %s!', qname);
-                        return r;
+                        if (queryInfo[dbname]) {
+                            qinfo = queryInfo[dbname][qname];
+                        }
+
+                        if (!qinfo) {
+                            cerr('Query info not found for %s!', qname);
+                            return r;
+                        }
+
+                        r.dataType = {
+                            fields: qinfo
+                        };
                     }
-
-                    r.dataType = {
-                        fields: qinfo
-                    };
 
                     return r;
                 }
@@ -412,7 +430,7 @@ function showAPI (req, res) {
 }
 
 function addRecord (req, res) {
-    itSucks(res, "NIY");
+    sendError(res, "NIY");
 }
 
 function getRecordList (req, res) {
@@ -424,39 +442,39 @@ function getRecordList (req, res) {
     ;
 
     if (!dbs[dbname]) {
-        return itSucks(res, 'Database not found.');
+        return sendError(res, 'Database not found.');
     }
 
-    if (! isAlphaNumeric(dbname)) {
-        return itSucks(res, 'DB value must be alphanumeric.');
+    if (! examiner.isAlphaNumeric(dbname)) {
+        return sendError(res, 'DB value must be alphanumeric.');
     }
 
-    if (sqlCommentRegex.test(dbname)) {
-        return itSucks(res, 'DB value can not contain SQL comments.');
+    if (examiner.hasSQLcomment(dbname)) {
+        return sendError(res, 'DB value can not contain SQL comments.');
     }
 
-    if (! isAlphaNumeric(relation)) {
-        return itSucks(res, 'Relation value must be alphanumeric.');
+    if (! examiner.isAlphaNumeric(relation)) {
+        return sendError(res, 'Relation value must be alphanumeric.');
     }
 
-    if (sqlCommentRegex.test(relation)) {
-        return itSucks(res, 'Relation value can not contain SQL comments.');
+    if (examiner.hasSQLcomment(relation)) {
+        return sendError(res, 'Relation value can not contain SQL comments.');
     }
 
-    if (! isAlphaNumeric(sortby)) {
-        return itSucks(res, 'SortBy value must be alphanumeric.');
+    if (! examiner.isAlphaNumeric(sortby)) {
+        return sendError(res, 'SortBy value must be alphanumeric.');
     }
 
-    if (sqlCommentRegex.test(sortby)) {
-        return itSucks(res, 'SortBy value can not contain SQL comments.');
+    if (examiner.hasSQLcomment(sortby)) {
+        return sendError(res, 'SortBy value can not contain SQL comments.');
     }
 
     if (isNaN(page)) {
-        return itSucks(res, 'Page value must be numeric.');
+        return sendError(res, 'Page value must be numeric.');
     }
 
     if (isNaN(count)) {
-        return itSucks(res, 'PerPage value must be numeric.');
+        return sendError(res, 'PerPage value must be numeric.');
     }
 
     var limit = (count < 1)    ? 1
@@ -472,7 +490,7 @@ function getRecordList (req, res) {
         query,
         null,
         function (err, results) {
-            if (err) { return itSucks(res, err); }
+            if (err) { return sendError(res, err); }
             itsGood(res, { results: results });
         }
     );
@@ -485,27 +503,27 @@ function getRecord (req, res) {
     ;
 
     if (!dbs[dbname]) {
-        return itSucks(res, 'Database not found.');
+        return sendError(res, 'Database not found.');
     }
 
-    if (! isAlphaNumeric(dbname)) {
-        return itSucks(res, 'DB value must be alphanumeric.');
+    if (! examiner.isAlphaNumeric(dbname)) {
+        return sendError(res, 'DB value must be alphanumeric.');
     }
 
-    if (sqlCommentRegex.test(dbname)) {
-        return itSucks(res, 'DB value can not contain SQL comments.');
+    if (examiner.hasSQLcomment(dbname)) {
+        return sendError(res, 'DB value can not contain SQL comments.');
     }
 
-    if (! isAlphaNumeric(relation)) {
-        return itSucks(res, 'Relation value must be alphanumeric.');
+    if (! examiner.isAlphaNumeric(relation)) {
+        return sendError(res, 'Relation value must be alphanumeric.');
     }
 
-    if (sqlCommentRegex.test(relation)) {
-        return itSucks(res, 'Relation value can not contain SQL comments.');
+    if (examiner.hasSQLcomment(relation)) {
+        return sendError(res, 'Relation value can not contain SQL comments.');
     }
 
-    if (! isAlphaNumeric(id)) {
-        return itSucks(res, 'ID must be a alphanumeric.');
+    if (! examiner.isAlphaNumeric(id)) {
+        return sendError(res, 'ID must be a alphanumeric.');
     }
 
     var query = util.format('select * from %s where id = ?', relation);
@@ -514,7 +532,7 @@ function getRecord (req, res) {
         query,
         [ id ],
         function (err, row) {
-            if (err) { return itSucks(res, err); }
+            if (err) { return sendError(res, err); }
             itsGood(res, { row: row });
         }
     );
@@ -528,35 +546,35 @@ function getSubRecordList (req, res) {
     ;
 
     if (!dbs[dbname]) {
-        return itSucks(res, 'Database not found.');
+        return sendError(res, 'Database not found.');
     }
 
-    if (! isAlphaNumeric(dbname)) {
-        return itSucks(res, 'DB value must be alphanumeric.');
+    if (! examiner.isAlphaNumeric(dbname)) {
+        return sendError(res, 'DB value must be alphanumeric.');
     }
 
-    if (sqlCommentRegex.test(dbname)) {
-        return itSucks(res, 'DB value can not contain SQL comments.');
+    if (examiner.hasSQLcomment(dbname)) {
+        return sendError(res, 'DB value can not contain SQL comments.');
     }
 
-    if (! isAlphaNumeric(relation)) {
-        return itSucks(res, 'Relation value must be alphanumeric.');
+    if (! examiner.isAlphaNumeric(relation)) {
+        return sendError(res, 'Relation value must be alphanumeric.');
     }
 
-    if (sqlCommentRegex.test(relation)) {
-        return itSucks(res, 'Relation value can not contain SQL comments.');
+    if (examiner.hasSQLcomment(relation)) {
+        return sendError(res, 'Relation value can not contain SQL comments.');
     }
 
-    if (! isAlphaNumeric(subrel)) {
-        return itSucks(res, 'SubRelation value must be alphanumeric.');
+    if (! examiner.isAlphaNumeric(subrel)) {
+        return sendError(res, 'SubRelation value must be alphanumeric.');
     }
 
-    if (sqlCommentRegex.test(subrel)) {
-        return itSucks(res, 'SubRelation value can not contain SQL comments.');
+    if (examiner.hasSQLcomment(subrel)) {
+        return sendError(res, 'SubRelation value can not contain SQL comments.');
     }
 
-    if (! isAlphaNumeric(id)) {
-        return itSucks(res, 'ID must be a alphanumeric.');
+    if (! examiner.isAlphaNumeric(id)) {
+        return sendError(res, 'ID must be a alphanumeric.');
     }
 
     var query = util.format('select * from %s where %s_id = ?', subrel, relation);
@@ -565,18 +583,18 @@ function getSubRecordList (req, res) {
         query,
         [ id ],
         function (err, results) {
-            if (err) { return itSucks(res, err); }
+            if (err) { return sendError(res, err); }
             itsGood(res, { results: results });
         }
     );
 }
 
 function updateRecord (req, res) {
-    itSucks(res, "NIY");
+    sendError(res, "NIY");
 }
 
 function deleteRecord(req, res) {
-    itSucks(res, "NIY");
+    sendError(res, "NIY");
 }
 
 function authenticate (req, res) {
@@ -592,11 +610,11 @@ function authenticate (req, res) {
 
     if (service) {
         if (!plugins[service]) {
-            return res.send({ ok: false, error: fmt("Service \"%s\" not found.", service) });
+            return sendError(res, fmt("Service \"%s\" not found.", service));
         }
 
         if (!auth) {
-            return res.send({ ok: false, error: fmt("Service auth info for \"%s\" not sent.", service) });
+            return sendError(res, fmt("Service auth info for \"%s\" not sent.", service));
         }
 
         return plugins[service].auth(
