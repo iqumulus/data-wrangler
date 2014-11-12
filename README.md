@@ -231,8 +231,8 @@ Example: curl 'https://dev.iqumulus.com:4400/db/billing/rel/invoice?perpage=10&p
 
 ```json
 {
-    ok: true,
-    results: [
+    "ok": true,
+    "results": [
         { "id": 1, "date": "2014-10-01", "amount": "33.00" },
         ...
     ]
@@ -248,8 +248,8 @@ Example: curl 'https://dev.iqumulus.com:4400/db/support/rel/ticket/42'
 
 ```json
 {
-    ok: true,
-    row: {
+    "ok": true,
+    "row": {
         "id": 1,
         "date": "2014-10-02",
         "subject": "All the things are broken!",
@@ -266,8 +266,8 @@ Example: curl 'https://dev.iqumulus.com:4400/db/billing/rel/invoice/42/linetems'
 
 ```json
 {
-    ok: true,
-    results: [
+    "ok": true,
+    "results": [
         { "id": 101, "invoice_id": 42, "item_id": 37, "quantity": "99" },
         ...
     ]
