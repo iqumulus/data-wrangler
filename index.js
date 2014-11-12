@@ -147,12 +147,7 @@ if (config.plugins) {
             routes.forEach(
                 function (r) {
                     var path = '/' + pname + r.path;
-
                     server[r.method](path, r.proc);
-
-                    if (r.fields) {
-
-                    }
                 }
             );
 
