@@ -135,13 +135,14 @@ The queries object contains a set of query identifiers pointing to SQL statement
 Query identifiers/names must be unique across all databases.
 Placing a query in this object creates a route on the wrangler's API.  For example:
 
+    "name": "foo",
     "queries": {
         "fooMakers": "select id, name from fooMakers"
     }
 
 Would create a route like
 
-    http://<dw host>/query/fooMakers
+    http://<dw host>/q/foo/fooMakers
 
 which would return an array of objects with "id" and "name" fields.
 
@@ -159,6 +160,7 @@ is not.
 
 Each "?" added to a query adds to the query's route.  The following config
 
+    "name": "foo",
     "queries": {
         "fooMakers": "select id, name from fooMakers",
         "fooMakersByPlace": "select id, name from fooMakers where place = ?",
@@ -167,15 +169,15 @@ Each "?" added to a query adds to the query's route.  The following config
 
 would lead to three routes:
 
-    /query/fooMakers
-    /query/fooMakersByPlace/:place
-    /query/fooMakersByPlaceAndType/:place/:type
+    /q/foo/fooMakers
+    /q/foo/fooMakersByPlace/:place
+    /q/foo/fooMakersByPlaceAndType/:place/:type
 
 Accessed like
 
-    /query/fooMakers
-    /query/fooMakersByPlace/Texas
-    /query/fooMakersByPlaceAndType/Texas/green
+    /q/foo/fooMakers
+    /q/foo/fooMakersByPlace/Texas
+    /q/foo/fooMakersByPlaceAndType/Texas/green
 
 Positional variables are automatically quoted.
 
@@ -188,7 +190,7 @@ The placement of named parameters is more flexible than positional vars.  One ca
 
 and have the following query:
 
-    /query/fooGeneric?column=name&table=fooMakers&field=place&value=Texas
+    /q/foo/fooGeneric?column=name&table=fooMakers&field=place&value=Texas
 
 work as expected.  The drawback to this flexibility is that the values passed to named parameters must be alphanumeric (aside from "_" and single "-" characters).
 All named parameters defined in the query become required to execute the query.
@@ -199,7 +201,17 @@ One can mix positional variables and named parameters:
 
     ->
 
-    /query/getStuff/4?relation=foo&field=id
+    /q/foo/getStuff/4?relation=foo&field=id
+
+Note: older versions of the wrangler put all queries under a single root route, "/query", rather than namespacing by database name.
+To avoid breaking existing setups, these routes are still created.  The above would look like
+
+    /query/fooMakers
+    /query/fooMakersByPlace/:place
+    /query/fooMakersByPlaceAndType/:place/:type
+
+These routes should work fine, but giving the same name to more than one query, even in separate databases, will lead to random
+behavior under this namespace.
 
 
 ### Generic CRUD operations
