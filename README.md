@@ -132,7 +132,7 @@ Step 7: Fire it up!
 
 
 The queries object contains a set of query identifiers pointing to SQL statements.
-Query identifiers/names must be unique across all databases.
+Query identifiers/names must be unique within each database.
 Placing a query in this object creates a route on the wrangler's API.  For example:
 
     "name": "foo",
