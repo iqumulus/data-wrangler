@@ -1,5 +1,7 @@
 # IQ Data Wrangler
 
+Transform SQL queries to JSON-based REST paths quickly and easily. 
+
 ### Install
 
 
